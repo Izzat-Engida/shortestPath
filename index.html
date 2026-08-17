@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shortest Path Finder</title>
-    <!-- Leaflet CSS & JS -->
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
@@ -124,7 +124,7 @@
         .sidebar-toggle {
             display: none;
             position: absolute;
-            top: 16px;
+            top: 22px;
             left: 16px;
             z-index: 1000;
             width: 40px;
@@ -191,12 +191,14 @@
         <span>Drop CSV here or click to upload</span>
         <input name="csvFile" type="file" accept=".csv"/>
     </div>
-    <div class="locations">
+    <div class="locations" >
         Initializing location services...
     </div>
-    <div class="list"></div>
+    <div class="list" id="locationList">
+        <span style="color: var(--secondary); font-size: 13px; text-align: center; margin-top: 20px;">Upload a CSV containing:<br><b>Name, Latitude, Longitude</b></span>
+    </div>
     <div class="button">
-        <button>Shortest Path</button>
+        <button id="calcBtn">Calculate Shortest Path</button>
     </div>
 </div>
 
@@ -209,7 +211,7 @@
     const toggle = document.getElementById('sidebarToggle');
     const over = document.getElementById('over');
 
-    // Mobile Sidebar Toggle
+    
     function toggleSidebar() {
         sidebar.classList.toggle('open');
         over.classList.toggle('show');
@@ -219,7 +221,6 @@
     toggle.addEventListener('click', toggleSidebar);
     over.addEventListener('click', toggleSidebar);
 
-    // Initialize Reliable Leaflet Map
     const map = L.map('map').setView([9.0300, 38.7400], 13);
     
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -228,14 +229,20 @@
     }).addTo(map);
 
     let userMarker = null;
+    let userLocation=null;
+    let locationData=[];
+    let mapMarkers=[];
+    let polylineLayer=null;
 
-    // Location Handler & Debugger
+    
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                console.log("📍 SUCCESS:", pos);
+                console.log(" SUCCESS:", pos);
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
+                userLocation={lat:lat,lon:lon}
+
                 console.log(`Accuracy radius: ${pos.coords.accuracy} meters`);
 
                 map.setView([lat, lon], 15);
@@ -252,14 +259,121 @@
                 document.querySelector('.locations').textContent = `Location locked (Accuracy: ${Math.round(pos.coords.accuracy)}m)`;
             },
             (err) => {
-                console.error("❌ ERROR CODE:", err.code, err.message);
+                console.error(" ERROR CODE:", err.code, err.message);
                 document.querySelector('.locations').textContent = 'Could not get location. Check device permissions.';
+                userLocation={lat:9.0300,lon:38.7400};
             },
             { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         );
     } else {
         document.querySelector('.locations').textContent = 'Geolocation not supported by this browser.';
     }
+    document.getElementById('csvInput').addEventListener('change',(e)=>{
+        const file=e.target.files[0];
+        if(!file) return;
+
+        const reader=new FileReader();
+        reader.onload=(event)=>{
+            const text=event.target.result;
+            parseCSV(text);
+        };
+        reader.readAsText(file);
+    })
+    const parseCSV=(text)=>{
+        const lines=text.split(/\r\n|\n/);
+        locationData=[];
+        mapMarkers.forEach(m=>removeLayer(m));
+        mapMarkers=[];
+
+        for(let i=0;i<lines.length;i++){
+            const line=lines[i].trim()
+            if(!line) continue;
+
+            const cols=line.split(',').map(c=>c.trim())
+
+            if(cols.length>=3){
+                const name=cols[0];
+                const lat=parseFloat(cols[1]);
+                const lon=parseFloat(cols[2]);
+
+                if(!isNaN(lat) && !isNaN(lon)){
+                    locationData.push({name,lat,lon,visited:false})
+                }
+            }
+        }
+        renderMarkers();
+        renderSidebarList(locationData);
+    }
+    const renderMarkers=()=>{
+        mapMarkers.forEach(m=>map.removeLayer(m));
+        mapMarkers=[];
+        locationData.forEach((loc,index)=>{
+            const marker=L.marker([loc.lat,loc.lon]).addTo(map).bindPopup(`<b>${index+1}. ${loc.name}</b>`);
+            mapMarkers.push(marker);
+        });
+        if (mapMarkers.length>0){
+            const group=L.featureGroup(mapMarkers);
+            map.fitBounds(group.getBounds().pad(0.2));
+        }
+    }
+    const renderSidebarList=(list)=>{
+        const container=document.getElementById('locationList');
+        container.innerHTML='';
+
+        list.forEach((loc,index)=>{
+           const card = document.createElement('div');
+            card.className = 'location-card';
+            
+            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lon}&travelmode=driving`;
+
+            card.innerHTML = `
+                <div><b>${index + 1}. ${loc.name}</b></div>
+                <div style="font-size: 11px; color: var(--secondary);">Lat: ${loc.lat}, Lon: ${loc.lon}</div>
+                <a class="action-btn" href="${navUrl}" target="_blank">Navigate via Google Maps</a>
+            `;
+            container.appendChild(card); 
+        })
+    }
+    document.getElementById('calcBtn').addEventListener('click',()=>{
+        if(!userLocation){
+            alert("Waiting for Gps Location");
+            return;
+        }
+        if(locationData.length==0){
+            alert("Please Upload A csv file with locations first!");
+            return;
+        }
+        let unvisited=[...locationData];
+        let currentPos=userLocation;
+        let optimizedPath=[];
+
+        while(unvisited.length>0){
+            let nearestIdx=0;
+            let midDist=Infinity;
+
+            unvisited.forEach((loc,idx)=>{
+                const dist=Math.hypot(loc.lat-currentPos.lat,loc.lon-currentPos.lon);
+                if(dist<midDist){
+                    midDist=dist;
+                    nearestIdx=idx;
+                }
+            });
+            const nextStop=unvisited.splice(nearestIdx,1)[0];
+            optimizedPath.push(nextStop);
+            currentPos={lat:nextStop.lat,lon:nextStop.lon};
+        }
+        locationData=optimizedPath;
+        renderSidebarList(locationData);
+
+        if(polylineLayer) map.removeLayer(polylineLayer);
+
+        const pathCoords=[[userLocation.lat,userLocation.lon],...locationData.map(l=>[l.lat,l.lon])];
+
+        polylineLayer=L.polyline(pathCoords,{color:'#2563EB',weight:4,opacity:0.7}).addTo(map);
+
+        alert("Shortest path found")
+    })
+    
 </script>
 </body>
 </html>
