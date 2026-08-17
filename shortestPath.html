@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortest Path Finder</title>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        :root {
+            --background: #F5F6F8;
+            --sidebar: #FFFFFF;
+            --primary: #2563EB;
+            --location: #10B981;
+            --danger: #EF4444;
+            --text: #111827;
+            --secondary: #6B7280;
+            --border: #E5E7EB;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            background: var(--background);
+            display: flex;
+            gap: 12px;
+            padding: 10px;
+            width: 100%;
+            height: 100vh;
+            font-family: sans-serif;
+            color: var(--text);
+        }
+        .sidebar {
+            width: 30%;
+            height: 100%;
+            background: var(--sidebar);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .main {
+            width: 70%;
+            height: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #E5E7EB;
+        }
+        .drop {
+            min-height: 120px;
+            width: 100%;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--secondary);
+            font-size: 13px;
+            cursor: pointer;
+            position: relative;
+            text-align: center;
+            padding: 10px;
+        }
+        .drop:hover {
+            border-color: var(--primary);
+            background: #F8FAFF;
+        }
+        .drop input[type="file"] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .locations {
+            background: #ECFDF5;
+            color: #047857;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .button {
+            margin-top: auto;
+        }
+        .button button {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .button button:hover {
+            background: #1d4ed8;
+        }
+        .sidebar-toggle {
+            display: none;
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 1000;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            cursor: pointer;
+            font-size: 18px;
+            align-items: center;
+            justify-content: center;
+        }
+        .over {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 900;
+        }
+        .over.show {
+            display: block;
+        }
+        @media(max-width: 768px) {
+            body {
+                position: relative;
+                overflow: hidden;
+                padding: 0;
+            }
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 85%;
+                max-width: 320px;
+                height: 100%;
+                z-index: 1001;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                border-radius: 0 8px 8px 0;
+                box-shadow: 4px 0 16px rgba(0,0,0,0.2);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main {
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
+            }
+            .sidebar-toggle {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">☰</button>
+<div class="over" id="over"></div>
+
+<div class="sidebar" id="sidebar">
+    <div class="drop">
+        <span>Drop CSV here or click to upload</span>
+        <input name="csvFile" type="file" accept=".csv"/>
+    </div>
+    <div class="locations">
+        Initializing location services...
+    </div>
+    <div class="list"></div>
+    <div class="button">
+        <button>Shortest Path</button>
+    </div>
+</div>
+
+<div class="main">
+    <div id="map"></div>
+</div>
+
+<script>
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    const over = document.getElementById('over');
+
+    // Mobile Sidebar Toggle
+    function toggleSidebar() {
+        sidebar.classList.toggle('open');
+        over.classList.toggle('show');
+        toggle.textContent = sidebar.classList.contains('open') ? '✕' : '☰';
+    }
+
+    toggle.addEventListener('click', toggleSidebar);
+    over.addEventListener('click', toggleSidebar);
+
+    // Initialize Reliable Leaflet Map
+    const map = L.map('map').setView([9.0300, 38.7400], 13);
+    
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        maxZoom: 20
+    }).addTo(map);
+
+    let userMarker = null;
+
+    // Location Handler & Debugger
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                console.log("📍 SUCCESS:", pos);
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                console.log(`Accuracy radius: ${pos.coords.accuracy} meters`);
+
+                map.setView([lat, lon], 15);
+                if (userMarker) map.removeLayer(userMarker);
+
+                userMarker = L.circleMarker([lat, lon], {
+                    radius: 9,
+                    fillColor: '#2563EB',
+                    fillOpacity: 1,
+                    color: '#fff',
+                    weight: 2.5
+                }).addTo(map).bindPopup('<b>You are here</b>');
+
+                document.querySelector('.locations').textContent = `Location locked (Accuracy: ${Math.round(pos.coords.accuracy)}m)`;
+            },
+            (err) => {
+                console.error("❌ ERROR CODE:", err.code, err.message);
+                document.querySelector('.locations').textContent = 'Could not get location. Check device permissions.';
+            },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
+    } else {
+        document.querySelector('.locations').textContent = 'Geolocation not supported by this browser.';
+    }
+</script>
+</body>
+</html>
