@@ -446,7 +446,7 @@ window.promptBatchFinishModal = () => {
     const textEl = document.getElementById('batchFinishText');
     const confirmBtn = document.getElementById('batchFinishConfirmBtn');
 
-    if (titleEl) titleEl.textContent = `✅ Finished ${count} Locations?`;
+    if (titleEl) titleEl.textContent = ` Finished ${count} Locations?`;
     if (textEl) textEl.textContent = `You launched Google Maps navigation for ${count} locations. Have you completed visiting these ${count} locations?`;
     if (confirmBtn) confirmBtn.textContent = `Have Finished ${count} Locations`;
 
