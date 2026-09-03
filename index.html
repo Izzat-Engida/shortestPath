@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Zemenay PathFinder</title>
-    
+
     <link rel="icon" type="image/png" href="zemenay.png"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
     <style>
         * {
             box-sizing: border-box;
@@ -57,7 +57,6 @@
             width: 100vw;
         }
 
-        /* Apple Glass Sidebar / Bottom Sheet Panel */
         .sidebar {
             width: 380px;
             height: 100%;
@@ -80,7 +79,6 @@
             user-select: none;
         }
 
-        /* iOS Drag Handle Indicator Bar */
         .drag-indicator {
             display: none;
             width: 36px;
@@ -104,39 +102,6 @@
             margin: 0;
         }
 
-        
-        .drop-zone {
-            margin: 0 16px 16px 16px;
-            padding: 16px;
-            background: var(--bg-system);
-            border: 1.5px dashed var(--separator);
-            border-radius: var(--radius-medium);
-            text-align: center;
-            position: relative;
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        .drop-zone:hover {
-            border-color: var(--accent);
-        }
-
-        .drop-zone input {
-            position: absolute;
-            inset: 0;
-            opacity: 0;
-            cursor: pointer;
-            width: 100%;
-            height: 100%;
-        }
-
-        .drop-text {
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        
         .status-pill {
             margin: 0 16px 12px 16px;
             padding: 10px 14px;
@@ -150,7 +115,6 @@
             gap: 8px;
         }
 
-        /* List Stack */
         .list-container {
             flex: 1;
             overflow-y: auto;
@@ -167,7 +131,6 @@
             margin-top: 40px;
         }
 
-        
         .location-card {
             background: var(--bg-system);
             border-radius: var(--radius-medium);
@@ -216,7 +179,6 @@
             margin-top: 4px;
         }
 
-        
         .apple-btn {
             background: var(--accent);
             color: white;
@@ -261,7 +223,6 @@
             font-weight: 600;
             border-radius: var(--radius-medium);
         }
-
 
         .map-hud {
             position: absolute;
@@ -323,7 +284,6 @@
             font-size: 13px;
         }
 
-        
         .main-map {
             flex: 1;
             height: 100%;
@@ -335,7 +295,6 @@
             height: 100%;
         }
 
-        
         .mobile-toggle {
             display: none;
             position: absolute;
@@ -367,7 +326,7 @@
                 border-right: none;
                 border-top: 0.5px solid var(--separator);
                 border-radius: var(--radius-large) var(--radius-large) 0 0;
-                transform: translateY(calc(100% - 75px)); /* Displays just the peek header */
+                transform: translateY(calc(100% - 75px));
                 transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
             }
             .sidebar.expanded {
@@ -398,17 +357,12 @@
         </div>
     </div>
 
-    <div class="drop-zone">
-        <span class="drop-text">Drop CSV file or tap to upload</span>
-        <input type="file" id="csvInput" accept=".csv">
-    </div>
-
     <div class="status-pill" id="statusPill">
         <span>📍 Initializing GPS...</span>
     </div>
 
     <div class="list-container" id="locationList">
-        <div class="empty-state">Upload a CSV file to load stops.<br>Format: Name, Lat, Lon</div>
+        <div class="empty-state">Loading stops...</div>
     </div>
 
     <div class="footer-action">
@@ -435,9 +389,45 @@
     const sidebar = document.getElementById('sidebar');
     const sidebarHeader = document.getElementById('sidebarHeader');
     const mobileToggle = document.getElementById('mobileToggle');
+
+    const locations = [
+      { name: 'Gebeya', address: 'Minaye Office Park, Kirkos, Addis Ababa', lat: 8.995, lng: 38.7675 },
+      { name: 'Chapa', address: 'Novis Building, Bole Sub City, Addis Ababa', lat: 8.9912, lng: 38.7845 },
+      { name: 'Ethiopian Airlines', address: 'Bole International Airport, Addis Ababa', lat: 8.9733, lng: 38.793 },
+      { name: 'Safari Com', address: 'Wello Sefer, Africa Avenue, Addis Ababa', lat: 8.9942, lng: 38.7681 },
+      { name: 'Arif Pay', address: 'Warka Tower, 3rd Floor, Bole, Addis Ababa', lat: 9.0028, lng: 38.7831 },
+      { name: 'I cog lab', address: 'Hatal Building, Ethio-China Street, Addis Ababa', lat: 8.9902, lng: 38.7695 },
+      { name: 'Banehus Trading', address: 'Hatal Building, Ethio-China Road, Addis Ababa', lat: 8.9902, lng: 38.7695 },
+      { name: 'Guzo tech', address: '22 Mezoriya, Addis Ababa', lat: 9.015, lng: 38.79 },
+      { name: 'Ethswitch', address: 'Nega City Mall, 4th Floor, Kazanchis, Addis Ababa', lat: 9.0164, lng: 38.7656 },
+      { name: 'CRAFT ADDIS', address: 'SNAP Plaza, 10th Floor, Bole Road, Addis Ababa', lat: 8.9899, lng: 38.7876 },
+      { name: 'Flawless', address: 'Nega City Mall, 4th Floor, Kazanchis, Addis Ababa', lat: 9.0164, lng: 38.7656 },
+      { name: 'Noah Real Estate', address: 'Abyssinia Plaza, 12th Floor, Bole, Addis Ababa', lat: 8.9946, lng: 38.7904 },
+      { name: 'Hosea Real Estate', address: 'Hosea Real Estate Bldg, Atlas Road, Addis Ababa', lat: 8.9941, lng: 38.7882 },
+      { name: 'Zeleman studio', address: 'SNAP Plaza, 10th Floor, Bole Road, Addis Ababa', lat: 8.9899, lng: 38.7876 },
+      { name: 'DR. Senait Dental', address: 'Fetle Building, 2nd Floor, Wello Sefer, Addis Ababa', lat: 8.995, lng: 38.77 },
+      { name: 'IMS Makeup School And Studio', address: 'Bole Dembel City Center, Addis Ababa', lat: 9.0047, lng: 38.7669 },
+      { name: 'Flintstone Homes', address: 'Jommo Apartment, Kolfe Keranio, Addis Ababa', lat: 9.006, lng: 38.805 },
+      { name: 'ALX Ethiopia', address: 'Lideta Hub, 4th Floor, Lideta, Addis Ababa', lat: 9.0227, lng: 38.7468 },
+      { name: 'Dodai E-Mobility', address: 'Rahem Building, 1st Floor, Megenagna, Addis Ababa', lat: 9.0214, lng: 38.7998 },
+      { name: 'YenePay', address: 'Tensae Building, 2nd Floor, Bole, Addis Ababa', lat: 8.99, lng: 38.78 },
+      { name: 'The Talent Firm', address: 'Aberus Complex, 10th Floor, Kirkos, Addis Ababa', lat: 9.0059, lng: 38.7676 },
+      { name: 'Berry Advertising', address: 'Warka Tower, 7th Floor, Bole, Addis Ababa', lat: 9.0028, lng: 38.7831 },
+      { name: 'Cactus Ethiopia', address: 'Cactus Plaza, 2nd Floor, Bole Road, Addis Ababa', lat: 8.9995, lng: 38.7752 },
+      { name: 'Qene Games', address: 'Christina Plaza, 3rd Floor, Lancha, Addis Ababa', lat: 8.9895, lng: 38.7512 },
+      { name: 'Snap Specialty Coffee', address: 'SNAP Plaza, Bole Road, Addis Ababa', lat: 8.9899, lng: 38.7876 },
+      { name: 'Flamingo Advertising', address: 'Gotera, In front of Agona Cinema, Addis Ababa', lat: 8.9882, lng: 38.764 },
+      { name: 'Inclusive Interior Design', address: 'Addis Ababa', lat: 9.01, lng: 38.76 },
+      { name: 'Debisha Interiors', address: 'Bma Plaza, 3rd Floor, Gerji Emperial, Addis Ababa', lat: 9.0064, lng: 38.8055 },
+      { name: 'Hybrid Designs PLC (RIDE)', address: 'Lebenz Tower, 5th Floor, Gabon Street, Addis Ababa', lat: 8.9991, lng: 38.7715 },
+      { name: 'Kifiya Financial Technology', address: 'Cactus Plaza, 9th Floor, Addis Ababa', lat: 8.9995, lng: 38.7752 },
+      { name: 'JaRco Consulting PLC', address: 'Old Airport area, Addis Ababa', lat: 8.9921, lng: 38.7315 },
+      { name: 'Keste Damena', address: 'Gerji Mebrat Hail, Bole, Addis Ababa', lat: 9.01, lng: 38.76 },
+    ];
+
     let isExpanded = false;
 
-    const setSidebarExpanded=(expand)=> {
+    const setSidebarExpanded = (expand) => {
         isExpanded = expand;
         sidebar.classList.toggle('expanded', isExpanded);
         mobileToggle.textContent = isExpanded ? '✕' : '☰';
@@ -446,7 +436,6 @@
     mobileToggle.addEventListener('click', () => setSidebarExpanded(!isExpanded));
     sidebarHeader.addEventListener('click', () => setSidebarExpanded(!isExpanded));
 
-    
     let touchStartY = 0;
     sidebar.addEventListener('touchstart', (e) => {
         touchStartY = e.touches[0].clientY;
@@ -455,9 +444,9 @@
     sidebar.addEventListener('touchend', (e) => {
         let touchEndY = e.changedTouches[0].clientY;
         if (touchStartY - touchEndY > 40) {
-            setSidebarExpanded(true); 
+            setSidebarExpanded(true);
         } else if (touchEndY - touchStartY > 40) {
-            setSidebarExpanded(false); 
+            setSidebarExpanded(false);
         }
     }, {passive: true});
 
@@ -476,75 +465,6 @@
     let polylineLayer = null;
     let activeStopIndex = 0;
     let routeActive = false;
-
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(
-            (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                userLocation = { lat, lon };
-
-                if (!userMarker) {
-                    map.setView([lat, lon], 15);
-                    userMarker = L.circleMarker([lat, lon], {
-                        radius: 10,
-                        fillColor: '#007AFF',
-                        fillOpacity: 1,
-                        color: '#FFFFFF',
-                        weight: 3
-                    }).addTo(map).bindPopup('<b>Current Position</b>');
-                } else {
-                    userMarker.setLatLng([lat, lon]);
-                }
-
-                document.getElementById('statusPill').innerHTML = `<span>GPS Active (±${Math.round(pos.coords.accuracy)}m)</span>`;
-            },
-            (err) => {
-                console.error(err);
-                document.getElementById('statusPill').innerHTML = `<span>⚠️ GPS Offline. Using default fallback.</span>`;
-                userLocation = { lat: 9.0300, lon: 38.7400 };
-            },
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-        );
-    }
-
-    document.getElementById('csvInput').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => parseCSV(event.target.result);
-        reader.readAsText(file);
-    });
-
-    const parseCSV = (text) => {
-        const lines = text.split(/\r\n|\n/);
-        locationData = [];
-        mapMarkers.forEach(m => map.removeLayer(m));
-        mapMarkers = [];
-
-        lines.forEach(line => {
-            const clean = line.trim();
-            if (!clean) return;
-            const cols = clean.split(',').map(c => c.trim());
-            if (cols.length >= 3) {
-                const name = cols[0];
-                const lat = parseFloat(cols[1]);
-                const lon = parseFloat(cols[2]);
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    locationData.push({ name, lat, lon, visited: false });
-                }
-            }
-        });
-
-        renderMarkers();
-        renderSidebarList();
-
-        
-        if (window.innerWidth <= 768) {
-            setSidebarExpanded(true);
-        }
-    };
 
     const renderMarkers = () => {
         mapMarkers.forEach(m => map.removeLayer(m));
@@ -573,14 +493,14 @@
         container.innerHTML = '';
 
         if (locationData.length === 0) {
-            container.innerHTML = `<div class="empty-state">No locations uploaded.</div>`;
+            container.innerHTML = `<div class="empty-state">No locations loaded.</div>`;
             return;
         }
 
         locationData.forEach((loc, index) => {
             const card = document.createElement('div');
             card.className = `location-card ${routeActive && index === activeStopIndex ? 'active-target' : ''} ${loc.visited ? 'completed' : ''}`;
-            
+
             let actionHtml = '';
             if (routeActive && index === activeStopIndex && !loc.visited) {
                 const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lon}&travelmode=driving`;
@@ -603,15 +523,8 @@
         });
     };
 
-    document.getElementById('calcBtn').addEventListener('click', () => {
-        if (!userLocation) {
-            alert("Acquiring GPS fix... Please wait a moment.");
-            return;
-        }
-        if (locationData.length === 0) {
-            alert("Please upload a CSV file containing coordinates first.");
-            return;
-        }
+    const computeOptimalRoute = () => {
+        if (!userLocation || locationData.length === 0) return;
 
         let unvisited = [...locationData];
         let currentPos = userLocation;
@@ -634,7 +547,7 @@
             currentPos = { lat: nextStop.lat, lon: nextStop.lon };
         }
 
-        locationData = optimizedPath;
+        locationData = twoOptImprove(optimizedPath);
         activeStopIndex = 0;
         routeActive = true;
 
@@ -646,13 +559,37 @@
         drawPolyline();
 
         document.getElementById('calcBtn').textContent = "Recalculate Route";
-        
-        
-        if (window.innerWidth <= 768) {
-            setSidebarExpanded(false);
-        }
-    });
+    };
 
+    document.getElementById('calcBtn').addEventListener('click', computeOptimalRoute);
+const twoOptImprove = (path) => {
+    if (path.length < 4) return path;
+
+    const dist = (a, b) => Math.hypot(a.lat - b.lat, a.lon - b.lon);
+
+    let improved = true;
+    while (improved) {
+        improved = false;
+        for (let i = 0; i < path.length - 1; i++) {
+            for (let j = i + 2; j < path.length; j++) {
+                if (i === 0 && j === path.length - 1) continue;
+
+                const a = path[i], b = path[i + 1];
+                const c = path[j], d = path[j + 1] || null;
+
+                const currentDist = dist(a, b) + (d ? dist(c, d) : 0);
+                const newDist = dist(a, c) + (d ? dist(b, d) : 0);
+
+                if (newDist < currentDist) {
+                    const segment = path.slice(i + 1, j + 1).reverse();
+                    path = [...path.slice(0, i + 1), ...segment, ...path.slice(j + 1)];
+                    improved = true;
+                }
+            }
+        }
+    }
+    return path;
+};
     const updateHUD = () => {
         const titleEl = document.getElementById('hudTitle');
         const subEl = document.getElementById('hudSub');
@@ -681,7 +618,7 @@
     window.completeStop = (index) => {
         locationData[index].visited = true;
         activeStopIndex++;
-        
+
         renderMarkers();
         renderSidebarList();
         drawPolyline();
@@ -718,6 +655,43 @@
             lineJoin: 'round'
         }).addTo(map);
     };
+
+    locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
+    renderMarkers();
+    renderSidebarList();
+
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+            (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                userLocation = { lat, lon };
+
+                if (!userMarker) {
+                    map.setView([lat, lon], 15);
+                    userMarker = L.circleMarker([lat, lon], {
+                        radius: 10,
+                        fillColor: '#007AFF',
+                        fillOpacity: 1,
+                        color: '#FFFFFF',
+                        weight: 3
+                    }).addTo(map).bindPopup('<b>Current Position</b>');
+                    computeOptimalRoute();
+                } else {
+                    userMarker.setLatLng([lat, lon]);
+                }
+
+                document.getElementById('statusPill').innerHTML = `<span>GPS Active (±${Math.round(pos.coords.accuracy)}m)</span>`;
+            },
+            (err) => {
+                console.error(err);
+                document.getElementById('statusPill').innerHTML = `<span> GPS Offline. Using default fallback.</span>`;
+                userLocation = { lat: 9.0300, lon: 38.7400 };
+                computeOptimalRoute();
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+        );
+    }
 </script>
 </body>
 </html>
