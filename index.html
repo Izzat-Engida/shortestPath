@@ -57,6 +57,99 @@
             width: 100vw;
         }
 
+        .team-select-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .team-select-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-large);
+            padding: 28px 24px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .team-select-card h2 {
+            margin: 0 0 6px 0;
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .team-select-card p {
+            margin: 0 0 20px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .team-option {
+            background: var(--bg-system);
+            border: 1.5px solid var(--separator);
+            border-radius: var(--radius-medium);
+            padding: 16px 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .team-option:active {
+            transform: scale(0.96);
+        }
+
+        .team-option.wide {
+            grid-column: span 2;
+        }
+
+        .team-option .team-num {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .team-option .team-count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .team-badge-fixed {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 1002;
+            background: var(--accent);
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 999px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .team-badge-fixed.visible {
+            display: flex;
+        }
+
         .sidebar {
             width: 380px;
             height: 100%;
@@ -177,6 +270,7 @@
             display: flex;
             gap: 8px;
             margin-top: 4px;
+            align-items: center;
         }
 
         .apple-btn {
@@ -208,6 +302,11 @@
 
         .apple-btn.success {
             background: var(--accent-green);
+        }
+
+        .apple-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
 
         .footer-action {
@@ -276,12 +375,20 @@
         .hud-buttons {
             display: flex;
             gap: 8px;
+            align-items: center;
         }
 
         .hud-buttons .apple-btn {
             flex: 1;
             padding: 10px;
             font-size: 13px;
+        }
+
+        .hud-wait-msg {
+            flex: 1;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
         }
 
         .main-map {
@@ -342,10 +449,26 @@
                 top: 72px;
                 max-width: calc(100% - 24px);
             }
+            .team-badge-fixed {
+                top: 16px;
+                left: 16px;
+            }
         }
     </style>
 </head>
 <body>
+
+<div class="team-select-overlay" id="teamSelectOverlay">
+    <div class="team-select-card">
+        <h2>Choose Your Team</h2>
+        <p>Locations are split geographically and evenly between 5 teams.</p>
+        <div class="team-grid" id="teamGrid"></div>
+    </div>
+</div>
+
+<div class="team-badge-fixed" id="teamBadge" onclick="showTeamSwitcher()">
+    <span id="teamBadgeText">Team 1</span>
+</div>
 
 <button class="mobile-toggle" id="mobileToggle">☰</button>
 
@@ -390,7 +513,19 @@
     const sidebarHeader = document.getElementById('sidebarHeader');
     const mobileToggle = document.getElementById('mobileToggle');
 
-    const locations = [
+    const NUM_TEAMS = 5;
+    const ARRIVAL_THRESHOLD_METERS = 60;
+
+    const TEAM_COLORS = [
+        '#007AFF', // iOS blue
+        '#34C759', // iOS green
+        '#FF9500', // iOS orange
+        '#FF2D55', // iOS pink
+        '#AF52DE', // iOS purple
+    ];
+
+    // All locations across every team
+    const allLocations = [
       { name: 'Gebeya', address: 'Minaye Office Park, Kirkos, Addis Ababa', lat: 8.995, lng: 38.7675 },
       { name: 'Chapa', address: 'Novis Building, Bole Sub City, Addis Ababa', lat: 8.9912, lng: 38.7845 },
       { name: 'Ethiopian Airlines', address: 'Bole International Airport, Addis Ababa', lat: 8.9733, lng: 38.793 },
@@ -424,6 +559,125 @@
       { name: 'JaRco Consulting PLC', address: 'Old Airport area, Addis Ababa', lat: 8.9921, lng: 38.7315 },
       { name: 'Keste Damena', address: 'Gerji Mebrat Hail, Bole, Addis Ababa', lat: 9.01, lng: 38.76 },
     ];
+
+    // ---------- Distance helpers ----------
+    const haversineMeters = (lat1, lon1, lat2, lon2) => {
+        const R = 6371000;
+        const toRad = deg => deg * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                  Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.asin(Math.sqrt(a));
+    };
+
+    // ---------- Deterministic, capacity-balanced geographic clustering ----------
+    // Same input list -> same split every time, on every device, with no server needed.
+    // Every team gets as close to an equal number of stops as possible, while each
+    // team's stops stay geographically grouped together.
+    const clusterIntoTeams = (points, k) => {
+        const n = points.length;
+        const base = Math.floor(n / k);
+        const remainder = n % k;
+        const capacities = Array.from({ length: k }, (_, i) => base + (i < remainder ? 1 : 0));
+
+        // Initial centroids via farthest-point sampling (deterministic, no randomness)
+        let centroids = [{ lat: points[0].lat, lng: points[0].lng }];
+        while (centroids.length < k) {
+            let farthestPoint = null;
+            let farthestDist = -1;
+            points.forEach(p => {
+                const minDist = Math.min(...centroids.map(c => haversineMeters(p.lat, p.lng, c.lat, c.lng)));
+                if (minDist > farthestDist) {
+                    farthestDist = minDist;
+                    farthestPoint = p;
+                }
+            });
+            centroids.push({ lat: farthestPoint.lat, lng: farthestPoint.lng });
+        }
+
+        let assignments = new Array(n).fill(-1);
+
+        for (let iter = 0; iter < 15; iter++) {
+            const candidates = [];
+            points.forEach((p, pIdx) => {
+                centroids.forEach((c, cIdx) => {
+                    candidates.push({ pIdx, cIdx, dist: haversineMeters(p.lat, p.lng, c.lat, c.lng) });
+                });
+            });
+            candidates.sort((a, b) => a.dist - b.dist);
+
+            const newAssignments = new Array(n).fill(-1);
+            const counts = new Array(k).fill(0);
+            const assignedPoints = new Set();
+
+            for (const cand of candidates) {
+                if (assignedPoints.size === n) break;
+                if (assignedPoints.has(cand.pIdx)) continue;
+                if (counts[cand.cIdx] >= capacities[cand.cIdx]) continue;
+                newAssignments[cand.pIdx] = cand.cIdx;
+                counts[cand.cIdx]++;
+                assignedPoints.add(cand.pIdx);
+            }
+
+            const changed = newAssignments.some((v, i) => v !== assignments[i]);
+            assignments = newAssignments;
+
+            for (let c = 0; c < k; c++) {
+                const members = points.filter((_, idx) => assignments[idx] === c);
+                if (members.length > 0) {
+                    centroids[c] = {
+                        lat: members.reduce((s, p) => s + p.lat, 0) / members.length,
+                        lng: members.reduce((s, p) => s + p.lng, 0) / members.length
+                    };
+                }
+            }
+
+            if (!changed) break;
+        }
+
+        return assignments;
+    };
+
+    const teamAssignments = clusterIntoTeams(allLocations, NUM_TEAMS);
+    const locationsByTeam = Array.from({ length: NUM_TEAMS }, (_, teamIdx) =>
+        allLocations.filter((_, idx) => teamAssignments[idx] === teamIdx)
+    );
+
+    // ---------- Team selection UI ----------
+    let selectedTeam = null;
+    let locations = [];
+
+    const teamGrid = document.getElementById('teamGrid');
+    for (let i = 0; i < NUM_TEAMS; i++) {
+        const color = TEAM_COLORS[i % TEAM_COLORS.length];
+        const btn = document.createElement('div');
+        btn.className = 'team-option' + (NUM_TEAMS % 2 !== 0 && i === NUM_TEAMS - 1 ? ' wide' : '');
+        btn.style.borderColor = color;
+        btn.style.background = `${color}18`;
+        btn.innerHTML = `<div class="team-num" style="color:${color}">Team ${i + 1}</div><div class="team-count">${locationsByTeam[i].length} stops</div>`;
+        btn.addEventListener('click', () => selectTeam(i));
+        teamGrid.appendChild(btn);
+    }
+
+    const selectTeam = (teamIdx) => {
+        selectedTeam = teamIdx;
+        locations = locationsByTeam[teamIdx];
+
+        document.getElementById('teamSelectOverlay').style.display = 'none';
+        const badge = document.getElementById('teamBadge');
+        const color = TEAM_COLORS[teamIdx % TEAM_COLORS.length];
+        badge.style.background = color;
+        document.getElementById('teamBadgeText').textContent = `Team ${teamIdx + 1} (tap to switch)`;
+        badge.classList.add('visible');
+
+        initializeApp();
+    };
+
+    window.showTeamSwitcher = () => {
+        document.getElementById('teamSelectOverlay').style.display = 'flex';
+    };
 
     let isExpanded = false;
 
@@ -465,6 +719,13 @@
     let polylineLayer = null;
     let activeStopIndex = 0;
     let routeActive = false;
+    let watchId = null;
+
+    const isNearActiveStop = () => {
+        if (!userLocation || !routeActive || activeStopIndex >= locationData.length) return false;
+        const target = locationData[activeStopIndex];
+        return haversineMeters(userLocation.lat, userLocation.lon, target.lat, target.lon) <= ARRIVAL_THRESHOLD_METERS;
+    };
 
     const renderMarkers = () => {
         mapMarkers.forEach(m => map.removeLayer(m));
@@ -493,7 +754,7 @@
         container.innerHTML = '';
 
         if (locationData.length === 0) {
-            container.innerHTML = `<div class="empty-state">No locations loaded.</div>`;
+            container.innerHTML = `<div class="empty-state">No locations assigned to this team.</div>`;
             return;
         }
 
@@ -504,12 +765,21 @@
             let actionHtml = '';
             if (routeActive && index === activeStopIndex && !loc.visited) {
                 const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lon}&travelmode=driving`;
-                actionHtml = `
-                    <div class="card-actions">
-                        <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
-                        <button class="apple-btn success" onclick="completeStop(${index})">Arrived / Finish</button>
-                    </div>
-                `;
+                if (isNearActiveStop()) {
+                    actionHtml = `
+                        <div class="card-actions">
+                            <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
+                            <button class="apple-btn success" onclick="completeStop(${index})">Arrived / Finish</button>
+                        </div>
+                    `;
+                } else {
+                    actionHtml = `
+                        <div class="card-actions">
+                            <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
+                            <span class="card-badge" style="background: var(--accent-red); color: white;">Get closer to finish</span>
+                        </div>
+                    `;
+                }
             }
 
             card.innerHTML = `
@@ -523,10 +793,41 @@
         });
     };
 
+    const twoOptImprove = (path) => {
+        if (path.length < 4) return path;
+
+        const dist = (a, b) => Math.hypot(a.lat - b.lat, a.lon - b.lon);
+
+        let improved = true;
+        while (improved) {
+            improved = false;
+            for (let i = 0; i < path.length - 1; i++) {
+                for (let j = i + 2; j < path.length; j++) {
+                    if (i === 0 && j === path.length - 1) continue;
+
+                    const a = path[i], b = path[i + 1];
+                    const c = path[j], d = path[j + 1] || null;
+
+                    const currentDist = dist(a, b) + (d ? dist(c, d) : 0);
+                    const newDist = dist(a, c) + (d ? dist(b, d) : 0);
+
+                    if (newDist < currentDist) {
+                        const segment = path.slice(i + 1, j + 1).reverse();
+                        path = [...path.slice(0, i + 1), ...segment, ...path.slice(j + 1)];
+                        improved = true;
+                    }
+                }
+            }
+        }
+        return path;
+    };
+
     const computeOptimalRoute = () => {
         if (!userLocation || locationData.length === 0) return;
 
-        let unvisited = [...locationData];
+        let unvisited = locationData.filter(l => !l.visited);
+        if (unvisited.length === 0) return;
+
         let currentPos = userLocation;
         let optimizedPath = [];
 
@@ -547,8 +848,9 @@
             currentPos = { lat: nextStop.lat, lon: nextStop.lon };
         }
 
-        locationData = twoOptImprove(optimizedPath);
-        activeStopIndex = 0;
+        const visitedStops = locationData.filter(l => l.visited);
+        locationData = [...visitedStops, ...twoOptImprove(optimizedPath)];
+        activeStopIndex = visitedStops.length;
         routeActive = true;
 
         document.getElementById('mapHud').classList.add('visible');
@@ -561,35 +863,6 @@
         document.getElementById('calcBtn').textContent = "Recalculate Route";
     };
 
-    document.getElementById('calcBtn').addEventListener('click', computeOptimalRoute);
-const twoOptImprove = (path) => {
-    if (path.length < 4) return path;
-
-    const dist = (a, b) => Math.hypot(a.lat - b.lat, a.lon - b.lon);
-
-    let improved = true;
-    while (improved) {
-        improved = false;
-        for (let i = 0; i < path.length - 1; i++) {
-            for (let j = i + 2; j < path.length; j++) {
-                if (i === 0 && j === path.length - 1) continue;
-
-                const a = path[i], b = path[i + 1];
-                const c = path[j], d = path[j + 1] || null;
-
-                const currentDist = dist(a, b) + (d ? dist(c, d) : 0);
-                const newDist = dist(a, c) + (d ? dist(b, d) : 0);
-
-                if (newDist < currentDist) {
-                    const segment = path.slice(i + 1, j + 1).reverse();
-                    path = [...path.slice(0, i + 1), ...segment, ...path.slice(j + 1)];
-                    improved = true;
-                }
-            }
-        }
-    }
-    return path;
-};
     const updateHUD = () => {
         const titleEl = document.getElementById('hudTitle');
         const subEl = document.getElementById('hudSub');
@@ -599,14 +872,22 @@ const twoOptImprove = (path) => {
         if (activeStopIndex < locationData.length) {
             const currentTarget = locationData[activeStopIndex];
             titleEl.textContent = currentTarget.name;
-            subEl.textContent = `Tap 'Start' to launch external navigation`;
             badgeEl.textContent = `Stop ${activeStopIndex + 1} of ${locationData.length}`;
 
             const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentTarget.lat},${currentTarget.lon}&travelmode=driving`;
-            btnContainer.innerHTML = `
-                <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
-                <button class="apple-btn success" onclick="completeStop(${activeStopIndex})">Arrived / Finish</button>
-            `;
+            if (isNearActiveStop()) {
+                subEl.textContent = `You've arrived — tap Finish`;
+                btnContainer.innerHTML = `
+                    <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
+                    <button class="apple-btn success" onclick="completeStop(${activeStopIndex})">Arrived / Finish</button>
+                `;
+            } else {
+                subEl.textContent = `Tap 'Start' to launch external navigation`;
+                btnContainer.innerHTML = `
+                    <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
+                    <span class="hud-wait-msg">Get within ${ARRIVAL_THRESHOLD_METERS}m to finish</span>
+                `;
+            }
         } else {
             titleEl.textContent = `Route Completed!`;
             subEl.textContent = `All stops have been successfully visited.`;
@@ -616,6 +897,10 @@ const twoOptImprove = (path) => {
     };
 
     window.completeStop = (index) => {
+        if (index === activeStopIndex && !isNearActiveStop()) {
+            alert(`You need to be within ${ARRIVAL_THRESHOLD_METERS}m of the location to mark it as arrived.`);
+            return;
+        }
         locationData[index].visited = true;
         activeStopIndex++;
 
@@ -640,11 +925,11 @@ const twoOptImprove = (path) => {
         if (polylineLayer) map.removeLayer(polylineLayer);
 
         const activeNodes = locationData.filter(l => !l.visited);
-        if (activeNodes.length === 0 && userLocation) return;
+        if (activeNodes.length === 0 || !userLocation) return;
 
         const pathCoords = [
             [userLocation.lat, userLocation.lon],
-            ...locationData.map(l => [l.lat, l.lon])
+            ...activeNodes.map(l => [l.lat, l.lon])
         ];
 
         polylineLayer = L.polyline(pathCoords, {
@@ -656,42 +941,53 @@ const twoOptImprove = (path) => {
         }).addTo(map);
     };
 
-    locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
-    renderMarkers();
-    renderSidebarList();
+    const initializeApp = () => {
+        locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
+        renderMarkers();
+        renderSidebarList();
 
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(
-            (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                userLocation = { lat, lon };
+        document.getElementById('calcBtn').addEventListener('click', computeOptimalRoute);
 
-                if (!userMarker) {
-                    map.setView([lat, lon], 15);
-                    userMarker = L.circleMarker([lat, lon], {
-                        radius: 10,
-                        fillColor: '#007AFF',
-                        fillOpacity: 1,
-                        color: '#FFFFFF',
-                        weight: 3
-                    }).addTo(map).bindPopup('<b>Current Position</b>');
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    userLocation = { lat, lon };
+
+                    if (!userMarker) {
+                        map.setView([lat, lon], 15);
+                        userMarker = L.circleMarker([lat, lon], {
+                            radius: 10,
+                            fillColor: '#007AFF',
+                            fillOpacity: 1,
+                            color: '#FFFFFF',
+                            weight: 3
+                        }).addTo(map).bindPopup('<b>Current Position</b>');
+                        computeOptimalRoute();
+                    } else {
+                        userMarker.setLatLng([lat, lon]);
+                    }
+
+                    if (routeActive) {
+                        renderSidebarList();
+                        updateHUD();
+                    }
+
+                    document.getElementById('statusPill').innerHTML = `<span>GPS Active (±${Math.round(pos.coords.accuracy)}m)</span>`;
+                },
+                (err) => {
+                    console.error(err);
+                    document.getElementById('statusPill').innerHTML = `<span> GPS Offline. Using default fallback.</span>`;
+                    userLocation = { lat: 9.0300, lon: 38.7400 };
                     computeOptimalRoute();
-                } else {
-                    userMarker.setLatLng([lat, lon]);
-                }
-
-                document.getElementById('statusPill').innerHTML = `<span>GPS Active (±${Math.round(pos.coords.accuracy)}m)</span>`;
-            },
-            (err) => {
-                console.error(err);
-                document.getElementById('statusPill').innerHTML = `<span> GPS Offline. Using default fallback.</span>`;
-                userLocation = { lat: 9.0300, lon: 38.7400 };
-                computeOptimalRoute();
-            },
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-        );
-    }
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+            );
+        }
+    };
 </script>
 </body>
 </html>
