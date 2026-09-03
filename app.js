@@ -13,7 +13,7 @@ const TEAM_COLORS = [
 
 const TEAM_MEMBERS = [
     "Beti & Rahwa",
-    "Tegi, Eden, & Zelelam",
+    "Tegi, Eden, & Zelalem",
     "Bas & Amir"
 ];
 
@@ -174,6 +174,7 @@ const selectTeam = (teamIdx) => {
 
     routeActive = false;
     activeStopIndex = 0;
+    pendingBatch = null;
     document.getElementById('mapHud').classList.remove('visible');
 
     if (polylineLayer) {
@@ -304,6 +305,7 @@ window.clearAllAppData = () => {
         selectedTeam = null;
         routeActive = false;
         activeStopIndex = 0;
+        pendingBatch = null;
         
         document.getElementById('teamBadge').classList.remove('visible');
         document.getElementById('mapHud').classList.remove('visible');
@@ -362,6 +364,7 @@ let polylineLayer = null;
 let activeStopIndex = 0;
 let routeActive = false;
 let watchId = null;
+let pendingBatch = null;
 
 const MAX_GMAPS_STOPS = 10;
 
@@ -392,24 +395,145 @@ window.handleNavigateAll = () => {
     requestNotificationPermission();
 
     const unvisited = locationData.filter((l, idx) => !l.visited && idx >= activeStopIndex);
+    if (unvisited.length === 0) return;
+
     const fullRouteUrl = getGoogleMapsMultiRouteUrl();
+
+    let targetList = unvisited;
+    if (unvisited.length > MAX_GMAPS_STOPS) {
+        targetList = unvisited.slice(0, MAX_GMAPS_STOPS);
+    }
+
+    pendingBatch = {
+        locations: targetList,
+        count: targetList.length,
+        timestamp: Date.now()
+    };
 
     if (unvisited.length > MAX_GMAPS_STOPS) {
         const remainingStop = unvisited[MAX_GMAPS_STOPS];
-        const title = `🗺️ Stop #11 Saved for Batch 2`;
-        const message = `Google Maps is limited to 10 stops per URL. Batch 1 (Stops 1–10) launched in Google Maps. Stop #11 ("${remainingStop.name}") is saved in PathFinder and will alert you after Stop #10!`;
+        const stopNum = locationData.indexOf(remainingStop) + 1;
+        const title = `🗺️ Stop #${stopNum} Saved for Batch 2`;
+        const message = `Google Maps is limited to 10 stops per URL. Batch 1 (${targetList.length} stops) launched in Google Maps. Stop #${stopNum} ("${remainingStop.name}") is saved! When you return, click "Have Finished ${targetList.length} Locations" to proceed to Stop #${stopNum}.`;
 
-        showToastNotification(title, message, 'warning', `View Stop #11 Info`, () => {
-            alert(`Stop #11 Details:\nLocation: ${remainingStop.name}\nCoordinates: ${remainingStop.lat}, ${remainingStop.lon}`);
-        }, 12000);
+        showToastNotification(title, message, 'warning', `Mark ${targetList.length} Finished`, () => {
+            promptBatchFinishModal();
+        }, 15000);
 
-        sendNativeNotification(title, `Batch 1 mapped (10 stops). Stop #11 (${remainingStop.name}) saved for Batch 2!`);
+        sendNativeNotification(title, `Batch 1 mapped (${targetList.length} stops). Stop #${stopNum} (${remainingStop.name}) saved for Batch 2!`);
     } else {
         showToastNotification('🗺️ Launching Navigation', `All ${unvisited.length} stops sent to Google Maps.`, 'info');
     }
 
+    updateHUD();
     window.open(fullRouteUrl, '_blank');
 };
+
+window.promptBatchFinishModal = () => {
+    if (!pendingBatch) {
+        const unvisited = locationData.filter(l => !l.visited);
+        if (unvisited.length === 0) return;
+        const batchCount = Math.min(unvisited.length, MAX_GMAPS_STOPS);
+        pendingBatch = {
+            locations: unvisited.slice(0, batchCount),
+            count: batchCount,
+            timestamp: Date.now()
+        };
+    }
+
+    const count = pendingBatch.count;
+    const titleEl = document.getElementById('batchFinishTitle');
+    const textEl = document.getElementById('batchFinishText');
+    const confirmBtn = document.getElementById('batchFinishConfirmBtn');
+
+    if (titleEl) titleEl.textContent = `✅ Finished ${count} Locations?`;
+    if (textEl) textEl.textContent = `You launched Google Maps navigation for ${count} locations. Have you completed visiting these ${count} locations?`;
+    if (confirmBtn) confirmBtn.textContent = `Have Finished ${count} Locations`;
+
+    document.getElementById('batchFinishModal').style.display = 'flex';
+};
+
+window.closeBatchFinishModal = () => {
+    document.getElementById('batchFinishModal').style.display = 'none';
+};
+
+window.confirmBatchFinished = () => {
+    closeBatchFinishModal();
+
+    if (pendingBatch && pendingBatch.locations) {
+        pendingBatch.locations.forEach(batchLoc => {
+            const loc = locationData.find(l => l.name === batchLoc.name);
+            if (loc) loc.visited = true;
+        });
+        pendingBatch = null;
+    } else {
+        const unvisited = locationData.filter(l => !l.visited);
+        const batchToMark = unvisited.slice(0, MAX_GMAPS_STOPS);
+        batchToMark.forEach(loc => loc.visited = true);
+    }
+
+    saveVisitedState();
+    renderMarkers();
+    renderSidebarList();
+    drawPolyline();
+    updateHUD();
+
+    const remainingUnvisited = locationData.filter(l => !l.visited);
+    if (remainingUnvisited.length > 0) {
+        const nextLoc = remainingUnvisited[0];
+        const nextIdx = locationData.indexOf(nextLoc);
+        const stopNum = nextIdx + 1;
+
+        const titleEl = document.getElementById('nextStopTitle');
+        const textEl = document.getElementById('nextStopText');
+        const navBtn = document.getElementById('nextStopNavBtn');
+
+        if (titleEl) titleEl.textContent = `📍 Ready for Stop #${stopNum}`;
+        if (textEl) textEl.textContent = `10 locations marked as finished! Ready to navigate to Stop #${stopNum} ("${nextLoc.name}")?`;
+        if (navBtn) {
+            if (remainingUnvisited.length === 1) {
+                navBtn.textContent = `Start Stop #${stopNum} (${nextLoc.name}) Navigation`;
+            } else {
+                navBtn.textContent = `Start Remaining ${remainingUnvisited.length} Stops Navigation (Stop #${stopNum})`;
+            }
+        }
+
+        setTimeout(() => {
+            document.getElementById('nextStopModal').style.display = 'flex';
+        }, 300);
+    } else {
+        showToastNotification('🎉 Route Completed!', 'All locations for this team have been visited!', 'success');
+        sendNativeNotification('🎉 Route Completed!', 'All team locations have been visited!');
+    }
+};
+
+window.startNextStopNavigation = () => {
+    closeNextStopModal();
+    const remainingUnvisited = locationData.filter(l => !l.visited);
+    if (remainingUnvisited.length === 0) return;
+
+    if (remainingUnvisited.length === 1) {
+        const stop = remainingUnvisited[0];
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lon}&travelmode=driving`;
+        window.open(navUrl, '_blank');
+    } else {
+        handleNavigateAll();
+    }
+};
+
+window.closeNextStopModal = () => {
+    document.getElementById('nextStopModal').style.display = 'none';
+};
+
+window.addEventListener('focus', () => {
+    if (pendingBatch && pendingBatch.count > 0) {
+        setTimeout(() => {
+            if (pendingBatch) {
+                promptBatchFinishModal();
+            }
+        }, 400);
+    }
+});
 
 const isNearActiveStop = () => {
     if (!userLocation || !routeActive || activeStopIndex >= locationData.length) return false;
@@ -639,18 +763,23 @@ const updateHUD = () => {
 
         const singleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentTarget.lat},${currentTarget.lon}&travelmode=driving`;
 
-        let multiRouteNote = '';
-        if (unvisitedCount > MAX_GMAPS_STOPS) {
-            multiRouteNote = ` (Batch 1: First 10 of ${unvisitedCount})`;
-        }
-
-        if (isNearActiveStop()) {
+        if (pendingBatch && pendingBatch.count > 0) {
+            subEl.textContent = `Google Maps launched for ${pendingBatch.count} stops. Tap when finished!`;
+            btnContainer.innerHTML = `
+                <button class="apple-btn success" onclick="promptBatchFinishModal()">Have Finished ${pendingBatch.count} Locations</button>
+                <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
+            `;
+        } else if (isNearActiveStop()) {
             subEl.textContent = `You've arrived — tap Finish`;
             btnContainer.innerHTML = `
                 <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
                 <button class="apple-btn success" onclick="completeStop(${activeStopIndex})">Arrived / Finish</button>
             `;
         } else {
+            let multiRouteNote = '';
+            if (unvisitedCount > MAX_GMAPS_STOPS) {
+                multiRouteNote = ` (Batch 1: First 10 of ${unvisitedCount})`;
+            }
             subEl.textContent = `Launch navigation for next stop or full route${multiRouteNote}`;
             btnContainer.innerHTML = `
                 <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
@@ -686,7 +815,8 @@ window.completeStop = (index) => {
 window.resetRoute = () => {
     routeActive = false;
     activeStopIndex = 0;
-    locationData.format = locationData.forEach(l => l.visited = false);
+    pendingBatch = null;
+    locationData.forEach(l => l.visited = false);
     
     saveVisitedState();
 

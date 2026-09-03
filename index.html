@@ -29,6 +29,30 @@
     </div>
 </div>
 
+<!-- Batch Finish Confirmation Modal Pop-up -->
+<div class="reminder-modal-overlay" id="batchFinishModal">
+    <div class="reminder-modal-card">
+        <h2 style="color: var(--accent-green);" id="batchFinishTitle">✅ Finished 10 Locations?</h2>
+        <p id="batchFinishText">You launched Google Maps navigation for 10 locations. Have you completed visiting these 10 locations?</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="apple-btn success" id="batchFinishConfirmBtn" onclick="confirmBatchFinished()" style="width: 100%; padding: 12px; font-size: 14px;">Have Finished 10 Locations</button>
+            <button class="apple-btn secondary" onclick="closeBatchFinishModal()" style="width: 100%; padding: 10px; font-size: 13px; background: var(--bg-system); color: var(--text-primary);">Not Yet / Still Navigating</button>
+        </div>
+    </div>
+</div>
+
+<!-- Next Stop / Stop 11 Navigation Modal Pop-up -->
+<div class="reminder-modal-overlay" id="nextStopModal">
+    <div class="reminder-modal-card">
+        <h2 style="color: var(--accent);" id="nextStopTitle">📍 Ready for Stop #11?</h2>
+        <p id="nextStopText">Great job completing the 10 locations! Your next stop is ready for navigation.</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="apple-btn" id="nextStopNavBtn" onclick="startNextStopNavigation()" style="width: 100%; padding: 12px; font-size: 14px;">Start Stop #11 Navigation</button>
+            <button class="apple-btn secondary" onclick="closeNextStopModal()" style="width: 100%; padding: 10px; font-size: 13px; background: var(--bg-system); color: var(--text-primary);">View Map & Details</button>
+        </div>
+    </div>
+</div>
+
 <!-- Floating Toast Container for Notifications -->
 <div class="toast-container" id="toastContainer"></div>
 
