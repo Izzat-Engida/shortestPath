@@ -13,8 +13,8 @@ const TEAM_COLORS = [
 
 const TEAM_MEMBERS = [
     "Beti & Rahwa",
-    "[Placeholder Team 2 Member]",
-    "[Placeholder Team 3 Member]"
+    "[Tegi, Eden, & Zelelam]",
+    "[Bas & Amir]"
 ];
 
 const allLocations = [
