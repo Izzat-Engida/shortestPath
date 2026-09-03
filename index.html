@@ -560,7 +560,7 @@
       { name: 'Keste Damena', address: 'Gerji Mebrat Hail, Bole, Addis Ababa', lat: 9.01, lng: 38.76 },
     ];
 
-    // ---------- Distance helpers ----------
+
     const haversineMeters = (lat1, lon1, lat2, lon2) => {
         const R = 6371000;
         const toRad = deg => deg * Math.PI / 180;
@@ -572,10 +572,7 @@
         return R * 2 * Math.asin(Math.sqrt(a));
     };
 
-    // ---------- Deterministic, capacity-balanced geographic clustering ----------
-    // Same input list -> same split every time, on every device, with no server needed.
-    // Every team gets as close to an equal number of stops as possible, while each
-    // team's stops stay geographically grouped together.
+
     const clusterIntoTeams = (points, k) => {
         const n = points.length;
         const base = Math.floor(n / k);
@@ -645,7 +642,7 @@
         allLocations.filter((_, idx) => teamAssignments[idx] === teamIdx)
     );
 
-    // ---------- Team selection UI ----------
+
     let selectedTeam = null;
     let locations = [];
 
@@ -666,12 +663,33 @@
         locations = locationsByTeam[teamIdx];
 
         document.getElementById('teamSelectOverlay').style.display = 'none';
+
         const badge = document.getElementById('teamBadge');
         const color = TEAM_COLORS[teamIdx % TEAM_COLORS.length];
+
         badge.style.background = color;
         document.getElementById('teamBadgeText').textContent = `Team ${teamIdx + 1} (tap to switch)`;
         badge.classList.add('visible');
 
+        routeActive = false;
+        activeStopIndex = 0;
+        document.getElementById('mapHud').classList.remove('visible');
+
+        if (polylineLayer) {
+            map.removeLayer(polylineLayer);
+            polylineLayer = null;
+        }
+
+        mapMarkers.forEach(m => map.removeLayer(m));
+        mapMarkers = [];
+        locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
+        renderMarkers();
+        renderSidebarList();
+        document.getElementById('calcBtn').textContent = "Compute Optimal Route";
+
+        if (userLocation) {
+            computeOptimalRoute();
+        }
         initializeApp();
     };
 
