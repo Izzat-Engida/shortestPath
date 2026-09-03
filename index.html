@@ -765,9 +765,9 @@
     const map = L.map('map', { zoomControl: false }).setView([9.0300, 38.7400], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO',
-        maxZoom: 20
+   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
     }).addTo(map);
 
     let userLocation = null;
@@ -778,7 +778,23 @@
     let activeStopIndex = 0;
     let routeActive = false;
     let watchId = null;
+const getGoogleMapsMultiRouteUrl = () => {
+    const unvisited = locationData.filter((l, idx) => !l.visited && idx >= activeStopIndex);
+    if (unvisited.length === 0) return '#';
 
+    const destination = unvisited[unvisited.length - 1];
+    const intermediateStops = unvisited.slice(0, unvisited.length - 1);
+
+    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lon}`;
+    
+    if (intermediateStops.length > 0) {
+        const waypointsStr = intermediateStops.map(s => `${s.lat},${s.lon}`).join('|');
+        url += `&waypoints=${waypointsStr}`;
+    }
+    
+    url += `&travelmode=driving`;
+    return url;
+};
     const isNearActiveStop = () => {
         if (!userLocation || !routeActive || activeStopIndex >= locationData.length) return false;
         const target = locationData[activeStopIndex];
@@ -921,39 +937,40 @@
         document.getElementById('calcBtn').textContent = "Recalculate Route";
     };
 
-    const updateHUD = () => {
-        const titleEl = document.getElementById('hudTitle');
-        const subEl = document.getElementById('hudSub');
-        const badgeEl = document.getElementById('hudBadge');
-        const btnContainer = document.getElementById('hudButtonsContainer');
+const updateHUD = () => {
+    const titleEl = document.getElementById('hudTitle');
+    const subEl = document.getElementById('hudSub');
+    const badgeEl = document.getElementById('hudBadge');
+    const btnContainer = document.getElementById('hudButtonsContainer');
 
-        if (activeStopIndex < locationData.length) {
-            const currentTarget = locationData[activeStopIndex];
-            titleEl.textContent = currentTarget.name;
-            badgeEl.textContent = `Stop ${activeStopIndex + 1} of ${locationData.length}`;
+    if (activeStopIndex < locationData.length) {
+        const currentTarget = locationData[activeStopIndex];
+        titleEl.textContent = currentTarget.name;
+        badgeEl.textContent = `Stop ${activeStopIndex + 1} of ${locationData.length}`;
 
-            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentTarget.lat},${currentTarget.lon}&travelmode=driving`;
-            if (isNearActiveStop()) {
-                subEl.textContent = `You've arrived — tap Finish`;
-                btnContainer.innerHTML = `
-                    <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
-                    <button class="apple-btn success" onclick="completeStop(${activeStopIndex})">Arrived / Finish</button>
-                `;
-            } else {
-                subEl.textContent = `Tap 'Start' to launch external navigation`;
-                btnContainer.innerHTML = `
-                    <a class="apple-btn" href="${navUrl}" target="_blank">Start Navigation</a>
-                    <span class="hud-wait-msg">Get within ${ARRIVAL_THRESHOLD_METERS}m to finish</span>
-                `;
-            }
+        const singleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentTarget.lat},${currentTarget.lon}&travelmode=driving`;
+        const fullRouteUrl = getGoogleMapsMultiRouteUrl();
+
+        if (isNearActiveStop()) {
+            subEl.textContent = `You've arrived — tap Finish`;
+            btnContainer.innerHTML = `
+                <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
+                <button class="apple-btn success" onclick="completeStop(${activeStopIndex})">Arrived / Finish</button>
+            `;
         } else {
-            titleEl.textContent = `Route Completed!`;
-            subEl.textContent = `All stops have been successfully visited.`;
-            badgeEl.textContent = `Done`;
-            btnContainer.innerHTML = `<button class="apple-btn secondary" onclick="resetRoute()">Reset Trip</button>`;
+            subEl.textContent = `Launch navigation for next stop or full route`;
+            btnContainer.innerHTML = `
+                <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
+                <a class="apple-btn secondary" href="${fullRouteUrl}" target="_blank" style="background: var(--accent); color: white;">Navigate All (${locationData.filter(l => !l.visited).length})</a>
+            `;
         }
-    };
-
+    } else {
+        titleEl.textContent = `Route Completed!`;
+        subEl.textContent = `All stops have been successfully visited.`;
+        badgeEl.textContent = `Done`;
+        btnContainer.innerHTML = `<button class="apple-btn secondary" onclick="resetRoute()">Reset Trip</button>`;
+    }
+};
     window.completeStop = (index) => {
         if (index === activeStopIndex && !isNearActiveStop()) {
             alert(`You need to be within ${ARRIVAL_THRESHOLD_METERS}m of the location to mark it as arrived.`);
