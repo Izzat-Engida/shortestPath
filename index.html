@@ -24,10 +24,13 @@
 <div class="reminder-modal-overlay" id="reminderModal">
     <div class="reminder-modal-card">
         <h2 style="color: var(--accent-red);">🗺️ Google Maps Waypoint Limit</h2>
-        <p id="reminderModalText">Google Maps supports a maximum of 10 stops at a time. Your team currently has more active locations remaining. The app will automatically map the first batch of 11 stops for direct navigation. Simply tick off visited stops as you go, and the route will re-optimize!</p>
-        <button class="apple-btn" onclick="closeReminderModal()">Got it, Let's Go</button>
+        <p id="reminderModalText">Google Maps supports a maximum of 10 stops at a time. Your team currently has 11 locations. The app will automatically map the first 10 stops into Google Maps. Our notification system will automatically alert you when you reach Stop #10 so you don't forget Stop #11!</p>
+        <button class="apple-btn" onclick="closeReminderModal()">Got it, Enable Notifications & Go</button>
     </div>
 </div>
+
+<!-- Floating Toast Container for Notifications -->
+<div class="toast-container" id="toastContainer"></div>
 
 <div class="team-badge-fixed" id="teamBadge" onclick="showTeamSwitcher()">
     <span id="teamBadgeText">Team 1</span>

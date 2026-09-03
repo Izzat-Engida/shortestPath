@@ -13,8 +13,8 @@ const TEAM_COLORS = [
 
 const TEAM_MEMBERS = [
     "Beti & Rahwa",
-    "[Tegi, Eden, & Zelelam]",
-    "[Bas & Amir]"
+    "Tegi, Eden, & Zelelam",
+    "Bas & Amir"
 ];
 
 const allLocations = [
@@ -207,6 +207,91 @@ window.showTeamSwitcher = () => {
 
 window.closeReminderModal = () => {
     document.getElementById('reminderModal').style.display = 'none';
+    requestNotificationPermission();
+};
+
+const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+        try {
+            await Notification.requestPermission();
+        } catch (e) {
+            console.log('Notification permission request error:', e);
+        }
+    }
+};
+
+const sendNativeNotification = (title, body) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification(title, {
+                body: body,
+                icon: 'zemenay.png'
+            });
+        } catch (e) {
+            console.log('Error sending native notification:', e);
+        }
+    }
+};
+
+const showToastNotification = (title, message, type = 'warning', actionText = null, actionCallback = null, autoDismissMs = 8000) => {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+
+    let actionBtnHtml = '';
+    if (actionText && actionCallback) {
+        actionBtnHtml = `<div class="toast-actions"><button class="apple-btn" id="toastAction_${Date.now()}">${actionText}</button></div>`;
+    }
+
+    toast.innerHTML = `
+        <div class="toast-header">
+            <span class="toast-title">${title}</span>
+            <button class="toast-close" onclick="this.closest('.toast-notification').remove()">&times;</button>
+        </div>
+        <div class="toast-body">${message}</div>
+        ${actionBtnHtml}
+    `;
+
+    container.appendChild(toast);
+
+    if (actionText && actionCallback) {
+        const btn = toast.querySelector('button.apple-btn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                actionCallback();
+                toast.remove();
+            });
+        }
+    }
+
+    if (autoDismissMs) {
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 250);
+            }
+        }, autoDismissMs);
+    }
+};
+
+const checkAndNotifyRemainingStops = () => {
+    const unvisited = locationData.filter(l => !l.visited);
+    if (unvisited.length === 1 && locationData.length > MAX_GMAPS_STOPS) {
+        const stop11 = unvisited[0];
+        const title = `Batch 1 Complete! Stop #11 Ready`;
+        const message = `Great job completing Batch 1! Your 11th location ("${stop11.name}") is ready for navigation.`;
+        
+        const singleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop11.lat},${stop11.lon}&travelmode=driving`;
+
+        showToastNotification(title, message, 'success', `Start Stop #11 Navigation`, () => {
+            window.open(singleNavUrl, '_blank');
+        }, 15000);
+
+        sendNativeNotification(title, `Stop #11 Ready: ${stop11.name}. Click to launch navigation!`);
+    }
 };
 
 window.clearAllAppData = () => {
@@ -278,13 +363,15 @@ let activeStopIndex = 0;
 let routeActive = false;
 let watchId = null;
 
+const MAX_GMAPS_STOPS = 10;
+
 const getGoogleMapsMultiRouteUrl = () => {
     const unvisited = locationData.filter((l, idx) => !l.visited && idx >= activeStopIndex);
     if (unvisited.length === 0) return '#';
 
     let targetList = unvisited;
-    if (unvisited.length > 11) {
-        targetList = unvisited.slice(0, 11);
+    if (unvisited.length > MAX_GMAPS_STOPS) {
+        targetList = unvisited.slice(0, MAX_GMAPS_STOPS);
     }
 
     const destination = targetList[targetList.length - 1];
@@ -299,6 +386,29 @@ const getGoogleMapsMultiRouteUrl = () => {
     
     url += `&travelmode=driving`;
     return url;
+};
+
+window.handleNavigateAll = () => {
+    requestNotificationPermission();
+
+    const unvisited = locationData.filter((l, idx) => !l.visited && idx >= activeStopIndex);
+    const fullRouteUrl = getGoogleMapsMultiRouteUrl();
+
+    if (unvisited.length > MAX_GMAPS_STOPS) {
+        const remainingStop = unvisited[MAX_GMAPS_STOPS];
+        const title = `🗺️ Stop #11 Saved for Batch 2`;
+        const message = `Google Maps is limited to 10 stops per URL. Batch 1 (Stops 1–10) launched in Google Maps. Stop #11 ("${remainingStop.name}") is saved in PathFinder and will alert you after Stop #10!`;
+
+        showToastNotification(title, message, 'warning', `View Stop #11 Info`, () => {
+            alert(`Stop #11 Details:\nLocation: ${remainingStop.name}\nCoordinates: ${remainingStop.lat}, ${remainingStop.lon}`);
+        }, 12000);
+
+        sendNativeNotification(title, `Batch 1 mapped (10 stops). Stop #11 (${remainingStop.name}) saved for Batch 2!`);
+    } else {
+        showToastNotification('🗺️ Launching Navigation', `All ${unvisited.length} stops sent to Google Maps.`, 'info');
+    }
+
+    window.open(fullRouteUrl, '_blank');
 };
 
 const isNearActiveStop = () => {
@@ -386,6 +496,10 @@ window.toggleVisitedStatus = (index, isChecked) => {
         renderMarkers();
         renderSidebarList();
     }
+
+    if (isChecked) {
+        checkAndNotifyRemainingStops();
+    }
 };
 
 const recalculateActiveRouteAfterManualToggle = () => {
@@ -464,8 +578,8 @@ const computeOptimalRoute = () => {
     let unvisited = locationData.filter(l => !l.visited);
     if (unvisited.length === 0) return;
 
-    if (unvisited.length > 11) {
-        document.getElementById('reminderModalText').textContent = `Google Maps supports a maximum of 10 waypoints at a time. Your team currently has ${unvisited.length} unvisited locations. The app will automatically map the first batch of 11 stops. As you check them off, the remaining locations will recalculate dynamically!`;
+    if (unvisited.length > MAX_GMAPS_STOPS) {
+        document.getElementById('reminderModalText').textContent = `Google Maps supports a maximum of 10 stops per navigation URL. Your team has ${unvisited.length} total stops. The app will automatically map the first 10 stops into Google Maps, and our notification system will alert you when you reach Stop #10 so you don't forget Stop #11!`;
         document.getElementById('reminderModal').style.display = 'flex';
     }
 
@@ -524,11 +638,10 @@ const updateHUD = () => {
         badgeEl.textContent = `Stop ${activeStopIndex + 1} of ${locationData.length}`;
 
         const singleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentTarget.lat},${currentTarget.lon}&travelmode=driving`;
-        const fullRouteUrl = getGoogleMapsMultiRouteUrl();
 
         let multiRouteNote = '';
-        if (unvisitedCount > 11) {
-            multiRouteNote = ` (Batching first 11 of ${unvisitedCount} remaining)`;
+        if (unvisitedCount > MAX_GMAPS_STOPS) {
+            multiRouteNote = ` (Batch 1: First 10 of ${unvisitedCount})`;
         }
 
         if (isNearActiveStop()) {
@@ -541,7 +654,7 @@ const updateHUD = () => {
             subEl.textContent = `Launch navigation for next stop or full route${multiRouteNote}`;
             btnContainer.innerHTML = `
                 <a class="apple-btn" href="${singleNavUrl}" target="_blank">Next Stop</a>
-                <a class="apple-btn secondary" href="${fullRouteUrl}" target="_blank" style="background: var(--accent); color: white;">Navigate All (${Math.min(unvisitedCount, 11)})</a>
+                <button class="apple-btn secondary" onclick="handleNavigateAll()" style="background: var(--accent); color: white;">Navigate All (${Math.min(unvisitedCount, MAX_GMAPS_STOPS)})</button>
             `;
         }
     } else {
@@ -566,6 +679,8 @@ window.completeStop = (index) => {
     renderSidebarList();
     drawPolyline();
     updateHUD();
+
+    checkAndNotifyRemainingStops();
 };
 
 window.resetRoute = () => {
