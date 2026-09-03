@@ -313,6 +313,9 @@
             padding: 16px;
             border-top: 0.5px solid var(--separator);
             background: var(--bg-card);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .footer-action button {
@@ -490,6 +493,7 @@
 
     <div class="footer-action">
         <button class="apple-btn" id="calcBtn">Compute Optimal Route</button>
+        <button class="apple-btn secondary" onclick="clearAllAppData()" style="background: transparent; color: var(--accent-red); font-size: 13px;">Clear Data & Switch Team</button>
     </div>
 </div>
 
@@ -524,7 +528,6 @@
         '#AF52DE', // iOS purple
     ];
 
-    // All locations across every team
     const allLocations = [
       { name: 'Gebeya', address: 'Minaye Office Park, Kirkos, Addis Ababa', lat: 8.995, lng: 38.7675 },
       { name: 'Chapa', address: 'Novis Building, Bole Sub City, Addis Ababa', lat: 8.9912, lng: 38.7845 },
@@ -560,7 +563,6 @@
       { name: 'Keste Damena', address: 'Gerji Mebrat Hail, Bole, Addis Ababa', lat: 9.01, lng: 38.76 },
     ];
 
-
     const haversineMeters = (lat1, lon1, lat2, lon2) => {
         const R = 6371000;
         const toRad = deg => deg * Math.PI / 180;
@@ -572,14 +574,12 @@
         return R * 2 * Math.asin(Math.sqrt(a));
     };
 
-
     const clusterIntoTeams = (points, k) => {
         const n = points.length;
         const base = Math.floor(n / k);
         const remainder = n % k;
         const capacities = Array.from({ length: k }, (_, i) => base + (i < remainder ? 1 : 0));
 
-        // Initial centroids via farthest-point sampling (deterministic, no randomness)
         let centroids = [{ lat: points[0].lat, lng: points[0].lng }];
         while (centroids.length < k) {
             let farthestPoint = null;
@@ -642,7 +642,6 @@
         allLocations.filter((_, idx) => teamAssignments[idx] === teamIdx)
     );
 
-
     let selectedTeam = null;
     let locations = [];
 
@@ -658,9 +657,16 @@
         teamGrid.appendChild(btn);
     }
 
+    const saveVisitedState = () => {
+        if (selectedTeam === null) return;
+        const visitedNames = locationData.filter(l => l.visited).map(l => l.name);
+        localStorage.setItem(`zemenay_visited_team_${selectedTeam}`, JSON.stringify(visitedNames));
+    };
+
     const selectTeam = (teamIdx) => {
         selectedTeam = teamIdx;
         locations = locationsByTeam[teamIdx];
+        localStorage.setItem('zemenay_selected_team', teamIdx);
 
         document.getElementById('teamSelectOverlay').style.display = 'none';
 
@@ -682,7 +688,15 @@
 
         mapMarkers.forEach(m => map.removeLayer(m));
         mapMarkers = [];
-        locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
+
+        const savedVisited = JSON.parse(localStorage.getItem(`zemenay_visited_team_${teamIdx}`)) || [];
+        locationData = locations.map(loc => ({ 
+            name: loc.name, 
+            lat: loc.lat, 
+            lon: loc.lng, 
+            visited: savedVisited.includes(loc.name) 
+        }));
+
         renderMarkers();
         renderSidebarList();
         document.getElementById('calcBtn').textContent = "Compute Optimal Route";
@@ -690,11 +704,37 @@
         if (userLocation) {
             computeOptimalRoute();
         }
-        initializeApp();
     };
 
     window.showTeamSwitcher = () => {
         document.getElementById('teamSelectOverlay').style.display = 'flex';
+    };
+
+    window.clearAllAppData = () => {
+        if (confirm("Are you sure you want to clear all progress and reset team selection?")) {
+            localStorage.removeItem('zemenay_selected_team');
+            for (let i = 0; i < NUM_TEAMS; i++) {
+                localStorage.removeItem(`zemenay_visited_team_${i}`);
+            }
+            
+            selectedTeam = null;
+            routeActive = false;
+            activeStopIndex = 0;
+            
+            document.getElementById('teamBadge').classList.remove('visible');
+            document.getElementById('mapHud').classList.remove('visible');
+            document.getElementById('teamSelectOverlay').style.display = 'flex';
+            
+            if (polylineLayer) {
+                map.removeLayer(polylineLayer);
+                polylineLayer = null;
+            }
+            
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+            
+            document.getElementById('locationList').innerHTML = `<div class="empty-state">Please select a team to view stops.</div>`;
+        }
     };
 
     let isExpanded = false;
@@ -922,6 +962,8 @@
         locationData[index].visited = true;
         activeStopIndex++;
 
+        saveVisitedState();
+
         renderMarkers();
         renderSidebarList();
         drawPolyline();
@@ -932,6 +974,9 @@
         routeActive = false;
         activeStopIndex = 0;
         locationData.forEach(l => l.visited = false);
+        
+        saveVisitedState();
+
         document.getElementById('mapHud').classList.remove('visible');
         if (polylineLayer) map.removeLayer(polylineLayer);
         renderMarkers();
@@ -959,11 +1004,7 @@
         }).addTo(map);
     };
 
-    const initializeApp = () => {
-        locationData = locations.map(loc => ({ name: loc.name, lat: loc.lat, lon: loc.lng, visited: false }));
-        renderMarkers();
-        renderSidebarList();
-
+    const initGPS = () => {
         document.getElementById('calcBtn').addEventListener('click', computeOptimalRoute);
 
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
@@ -984,7 +1025,11 @@
                             color: '#FFFFFF',
                             weight: 3
                         }).addTo(map).bindPopup('<b>Current Position</b>');
-                        computeOptimalRoute();
+                        
+                        const savedTeam = localStorage.getItem('zemenay_selected_team');
+                        if (savedTeam !== null) {
+                            selectTeam(parseInt(savedTeam, 10));
+                        }
                     } else {
                         userMarker.setLatLng([lat, lon]);
                     }
@@ -998,14 +1043,20 @@
                 },
                 (err) => {
                     console.error(err);
-                    document.getElementById('statusPill').innerHTML = `<span> GPS Offline. Using default fallback.</span>`;
+                    document.getElementById('statusPill').innerHTML = `<span>⚠️ GPS Offline. Using default fallback.</span>`;
                     userLocation = { lat: 9.0300, lon: 38.7400 };
-                    computeOptimalRoute();
+                    
+                    const savedTeam = localStorage.getItem('zemenay_selected_team');
+                    if (savedTeam !== null && selectedTeam === null) {
+                        selectTeam(parseInt(savedTeam, 10));
+                    }
                 },
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
             );
         }
     };
+
+    initGPS();
 </script>
 </body>
 </html>
